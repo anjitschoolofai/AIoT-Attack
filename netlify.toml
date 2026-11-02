@@ -1,0 +1,18 @@
+# Netlify Configuration for IoT Attack Prediction Project
+[build]
+  publish = "."
+
+# SPA / Fallback redirect so clean URLs serve index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Security and caching headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
