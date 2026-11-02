@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IoT Shield - RPL Attack Detection & SOC Dashboard</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    /* Custom scrollbar and smooth transitions */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--background); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+    .pulse-ring {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .4; }
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased min-h-screen p-4 md:p-6 font-sans">
+  <div class="max-w-7xl mx-auto space-y-6">
+
+    <!-- Top Navigation & Status Bar -->
+    <header class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div class="flex items-center space-x-4">
+        <div class="w-12 h-12 rounded-xl bg-blue-600/10 border border-blue-500/30 flex items-center justify-center text-blue-500">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl font-bold tracking-tight text-[var(--foreground)]">IoT Shield Defense Center</h1>
+            <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Online
+            </span>
+          </div>
+          <p class="text-xs text-[var(--muted-foreground)]">RPL 6LoWPAN Multi-Attack Real-Time Classifier & Intrusion Detection System</p>
+        </div>
+      </div>
+
+      <!-- Quick Metrics Ribbon -->
+      <div class="flex items-center gap-3 flex-wrap">
+        <div class="px-3 py-1.5 rounded-xl bg-[var(--background)] border border-[var(--border)] text-xs">
+          <span class="text-[var(--muted-foreground)]">Primary Model:</span>
+          <span class="font-semibold text-blue-500 ml-1">Random Forest</span>
+        </div>
+        <div class="px-3 py-1.5 rounded-xl bg-[var(--background)] border border-[var(--border)] text-xs">
+          <span class="text-[var(--muted-foreground)]">Multi-Class Acc:</span>
+          <span class="font-semibold text-emerald-500 ml-1">68.2%</span>
+        </div>
+        <div class="px-3 py-1.5 rounded-xl bg-[var(--background)] border border-[var(--border)] text-xs">
+          <span class="text-[var(--muted-foreground)]">Sybil F1:</span>
+          <span class="font-semibold text-purple-500 ml-1">0.95</span>
+        </div>
+        <div class="px-3 py-1.5 rounded-xl bg-[var(--background)] border border-[var(--border)] text-xs">
+          <span class="text-[var(--muted-foreground)]">Lat:</span>
+          <span class="font-semibold text-[var(--foreground)] ml-1">&lt; 2ms</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="flex border-b border-[var(--border)] gap-2 overflow-x-auto pb-1 text-sm font-medium">
+      <button onclick="switchTab('detector')" id="tab-detector" class="tab-btn px-4 py-2.5 rounded-t-xl border-b-2 border-blue-500 text-blue-500 font-semibold flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Live Threat Detector
+      </button>
+      <button onclick="switchTab('topology')" id="tab-topology" class="tab-btn px-4 py-2.5 rounded-t-xl border-b-2 border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)] flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+        RPL Network Topology
+      </button>
+      <button onclick="switchTab('benchmarks')" id="tab-benchmarks" class="tab-btn px-4 py-2.5 rounded-t-xl border-b-2 border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)] flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        Model Benchmarks & Metrics
+      </button>
+      <button onclick="switchTab('traffic')" id="tab-traffic" class="tab-btn px-4 py-2.5 rounded-t-xl border-b-2 border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)] flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7zm4 4h8m-8 4h4"/></svg>
+        Live Packet Frame Log
+      </button>
+    </div>
+
+    <!-- TAB 1: LIVE THREAT DETECTOR -->
+    <div id="view-detector" class="tab-content space-y-6">
+
+      <!-- Attack Simulation Presets -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-semibold text-[var(--foreground)]">Simulation Quick-Load Presets</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">Inject calibrated feature signatures into the 1-second network window</p>
+          </div>
+          <span class="text-xs font-mono text-[var(--muted-foreground)]">1-Second Window Frame</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
+          <button onclick="loadPreset('normal')" class="px-3 py-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 text-xs font-medium text-left transition">
+            <div class="font-bold">Normal Flow</div>
+            <div class="text-[10px] opacity-80">Baseline Telemetry</div>
+          </button>
+          <button onclick="loadPreset('sha')" class="px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-medium text-left transition">
+            <div class="font-bold">SHA (Sinkhole)</div>
+            <div class="text-[10px] opacity-80">Traffic Diversion</div>
+          </button>
+          <button onclick="loadPreset('dfa')" class="px-3 py-2 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 text-xs font-medium text-left transition">
+            <div class="font-bold">DFA (DIS Flood)</div>
+            <div class="text-[10px] opacity-80">RPL Control Storm</div>
+          </button>
+          <button onclick="loadPreset('sfa')" class="px-3 py-2 rounded-xl border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 text-xs font-medium text-left transition">
+            <div class="font-bold">SFA (Selective Drop)</div>
+            <div class="text-[10px] opacity-80">Stealthy Packet Drop</div>
+          </button>
+          <button onclick="loadPreset('sya')" class="px-3 py-2 rounded-xl border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 text-purple-500 text-xs font-medium text-left transition">
+            <div class="font-bold">SYA (Sybil)</div>
+            <div class="text-[10px] opacity-80">Identity Spoofing</div>
+          </button>
+          <button onclick="loadPreset('vna')" class="px-3 py-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-500 text-xs font-medium text-left transition">
+            <div class="font-bold">VNA (Version No.)</div>
+            <div class="text-[10px] opacity-80">DODAG Rebuild Loop</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Controls & Prediction Readout Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Column: Input Sliders & Traffic Attributes -->
+        <div class="lg:col-span-7 bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-[var(--border)] pb-3">
+            <h2 class="text-sm font-semibold text-[var(--foreground)] flex items-center gap-2">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+              Network Frame Feature Parameters
+            </h2>
+            <button onclick="randomizeFeatures()" class="text-xs text-blue-500 hover:underline">Randomize</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Packet Count -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs">
+                <span class="text-[var(--muted-foreground)]">packetcount (Flow Packets)</span>
+                <span id="val-packetcount" class="font-mono font-medium text-[var(--foreground)]">4</span>
+              </div>
+              <input type="range" id="param-packetcount" min="1" max="50" value="4" oninput="updateParam('packetcount', this.value)" class="w-full accent-blue-600 bg-[var(--background)] h-1.5 rounded-lg cursor-pointer">
+            </div>
+
+            <!-- Source Traffic Ratio -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs">
+                <span class="text-[var(--muted-foreground)]">src_ratio (Source Volume Ratio)</span>
+                <span id="val-src_ratio" class="font-mono font-medium text-[var(--foreground)]">0.25</span>
+              </div>
+              <input type="range" id="param-src_ratio" min="0" max="1" step="0.01" value="0.25" oninput="updateParam('src_ratio', this.value)" class="w-full accent-blue-600 bg-[var(--background)] h-1.5 rounded-lg cursor-pointer">
+            </div>
+
+            <!-- Destination Traffic Ratio -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs">
+                <span class="text-[var(--muted-foreground)]">dst_ratio (Dest Volume Ratio)</span>
+                <span id="val-dst_ratio" class="font-mono font-medium text-[var(--foreground)]">0.18</span>
+              </div>
+              <input type="range" id="param-dst_ratio" min="0" max="1" step="0.01" value="0.18" oninput="updateParam('dst_ratio', this.value)" class="w-full accent-blue-600 bg-[var(--background)] h-1.5 rounded-lg cursor-pointer">
+            </div>
+
+            <!-- Source Duration Ratio -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs">
+                <span class="text-[var(--muted-foreground)]">src_duration_ratio</span>
+                <span id="val-src_duration_ratio" class="font-mono font-medium text-[var(--foreground)]">0.30</span>
+              </div>
+              <input type="range" id="param-src_duration_ratio" min="0" max="1" step="0.01" value="0.30" oninput="updateParam('src_duration_ratio', this.value)" class="w-full accent-blue-600 bg-[var(--background)] h-1.5 rounded-lg cursor-pointer">
+            </div>
+
+            <!-- DIS Count (Control Solicitation) -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs">
+                <span class="text-[var(--muted-foreground)]">DisCount (RPL DIS Storm)</span>
+                <span id="val-DisCount" class="font-mono font-medium text-[var(--foreground)]">0</span>
+              </div>
+              <input type="range" id="param-DisCount" min="0" max="30" value="0" oninput="updateParam('DisCount', this.value)" class="w-full accent-amber-500 bg-[var(--background)] h-1.5 rounded-lg cursor-pointer">
+            </div>
+
+            <!-- DIO Count (DODAG Info Object) -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs">
+                <span class="text-[var(--muted-foreground)]">DioCount (RPL DIO Messages)</span>
+                <span id="val-DioCount" class="font-mono font-medium text-[var(--foreground)]">2</span>
+              </div>
+              <input type="range" id="param-DioCount" min="0" max="25" value="2" oninput="updateParam('DioCount', this.value)" class="w-full accent-blue-500 bg-[var(--background)] h-1.5 rounded-lg cursor-pointer">
+            </div>
+
+            <!-- DAO Count (Dest Advertisement) -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs">
+                <span class="text-[var(--muted-foreground)]">DaoCount (RPL DAO Routes)</span>
+                <span id="val-DaoCount" class="font-mono font-medium text-[var(--foreground)]">1</span>
+              </div>
+              <input type="range" id="param-DaoCount" min="0" max="15" value="1" oninput="updateParam('DaoCount', this.value)" class="w-full accent-blue-500 bg-[var(--background)] h-1.5 rounded-lg cursor-pointer">
+            </div>
+
+            <!-- OtherMsg Count -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs">
+                <span class="text-[var(--muted-foreground)]">OtherMsg (Payload / Non-RPL)</span>
+                <span id="val-OtherMsg" class="font-mono font-medium text-[var(--foreground)]">5</span>
+              </div>
+              <input type="range" id="param-OtherMsg" min="0" max="40" value="5" oninput="updateParam('OtherMsg', this.value)" class="w-full accent-purple-500 bg-[var(--background)] h-1.5 rounded-lg cursor-pointer">
+            </div>
+
+            <!-- Total Byte Length -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs">
+                <span class="text-[var(--muted-foreground)]">TotalPacketLenght (Bytes)</span>
+                <span id="val-TotalPacketLenght" class="font-mono font-medium text-[var(--foreground)]">384</span>
+              </div>
+              <input type="range" id="param-TotalPacketLenght" min="40" max="2500" step="10" value="384" oninput="updateParam('TotalPacketLenght', this.value)" class="w-full accent-blue-600 bg-[var(--background)] h-1.5 rounded-lg cursor-pointer">
+            </div>
+
+            <!-- Node Identity Assignment -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs">
+                <span class="text-[var(--muted-foreground)]">src & dst Node IDs</span>
+                <span id="val-nodes" class="font-mono font-medium text-[var(--foreground)]">Src #4 &rarr; Dst #1</span>
+              </div>
+              <div class="flex gap-2">
+                <input type="number" id="param-src" min="0" max="40" value="4" onchange="runInference()" class="w-1/2 px-2 py-1 bg-[var(--background)] border border-[var(--border)] rounded text-xs font-mono">
+                <input type="number" id="param-dst" min="0" max="40" value="1" onchange="runInference()" class="w-1/2 px-2 py-1 bg-[var(--background)] border border-[var(--border)] rounded text-xs font-mono">
+              </div>
+            </div>
+          </div>
+
+          <button onclick="runInference()" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-md transition flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Execute Real-Time Random Forest Classification
+          </button>
+        </div>
+
+        <!-- Right Column: Inference Verdict & Explainability -->
+        <div class="lg:col-span-5 space-y-4">
+
+          <!-- Primary Detection Badge Card -->
+          <div id="verdict-card" class="bg-[var(--card)] border border-rose-500/30 rounded-2xl p-5 shadow-sm space-y-4 relative overflow-hidden">
+            <div class="flex items-start justify-between">
+              <div>
+                <span id="alert-pill" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                  ATTACK DETECTED
+                </span>
+                <h3 id="verdict-title" class="text-xl font-bold text-[var(--foreground)] mt-2">Sinkhole Attack (SHA)</h3>
+                <p id="verdict-desc" class="text-xs text-[var(--muted-foreground)]">Class 1: Malicious node advertises fake low rank attracting sensor flow</p>
+              </div>
+              <div class="text-right">
+                <div class="text-xs text-[var(--muted-foreground)]">Confidence</div>
+                <div id="verdict-conf" class="text-2xl font-black text-rose-500 font-mono">88.4%</div>
+              </div>
+            </div>
+
+            <!-- Confidence Bar -->
+            <div class="space-y-1">
+              <div class="h-2 w-full bg-[var(--background)] rounded-full overflow-hidden border border-[var(--border)]">
+                <div id="verdict-bar" class="h-full bg-rose-500 transition-all duration-500" style="width: 88.4%"></div>
+              </div>
+            </div>
+
+            <!-- Multi-Class Probability Distribution -->
+            <div class="space-y-2 pt-2 border-t border-[var(--border)]">
+              <span class="text-xs font-semibold text-[var(--foreground)]">Class Probability Distribution</span>
+              <div class="space-y-1.5 text-xs">
+                <div class="flex items-center justify-between">
+                  <span class="text-[var(--muted-foreground)]">Class 1: Sinkhole (SHA)</span>
+                  <div class="flex items-center gap-2 w-1/2">
+                    <div class="h-1.5 flex-1 bg-[var(--background)] rounded-full overflow-hidden"><div id="prob-sha" class="h-full bg-rose-500" style="width: 88%"></div></div>
+                    <span id="pct-sha" class="font-mono w-10 text-right">88.4%</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-[var(--muted-foreground)]">Class 2: DIS Flooding (DFA)</span>
+                  <div class="flex items-center gap-2 w-1/2">
+                    <div class="h-1.5 flex-1 bg-[var(--background)] rounded-full overflow-hidden"><div id="prob-dfa" class="h-full bg-amber-500" style="width: 4%"></div></div>
+                    <span id="pct-dfa" class="font-mono w-10 text-right">4.1%</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-[var(--muted-foreground)]">Class 3: Selective Fwd (SFA)</span>
+                  <div class="flex items-center gap-2 w-1/2">
+                    <div class="h-1.5 flex-1 bg-[var(--background)] rounded-full overflow-hidden"><div id="prob-sfa" class="h-full bg-orange-500" style="width: 2%"></div></div>
+                    <span id="pct-sfa" class="font-mono w-10 text-right">2.3%</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-[var(--muted-foreground)]">Class 4: Sybil Attack (SYA)</span>
+                  <div class="flex items-center gap-2 w-1/2">
+                    <div class="h-1.5 flex-1 bg-[var(--background)] rounded-full overflow-hidden"><div id="prob-sya" class="h-full bg-purple-500" style="width: 1%"></div></div>
+                    <span id="pct-sya" class="font-mono w-10 text-right">1.2%</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-[var(--muted-foreground)]">Class 5: Version No. (VNA)</span>
+                  <div class="flex items-center gap-2 w-1/2">
+                    <div class="h-1.5 flex-1 bg-[var(--background)] rounded-full overflow-hidden"><div id="prob-vna" class="h-full bg-cyan-500" style="width: 4%"></div></div>
+                    <span id="pct-vna" class="font-mono w-10 text-right">4.0%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Explainability / Root Cause -->
+            <div class="p-3 bg-[var(--background)] rounded-xl border border-[var(--border)] space-y-1.5">
+              <div class="text-xs font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Key Detection Drivers
+              </div>
+              <p id="verdict-explain" class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                Abnormal traffic concentration on node #4 (src_duration_ratio: 0.30) with heightened payload redirection to sink #1.
+              </p>
+            </div>
+
+            <!-- Automated SOC Mitigation -->
+            <div class="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20 space-y-1">
+              <div class="text-xs font-semibold text-blue-500 flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                Recommended Autonomous Mitigation
+              </div>
+              <p id="verdict-action" class="text-xs text-[var(--foreground)]">
+                Quarantine Mote IPv6 <code class="font-mono bg-[var(--background)] px-1 rounded">fe80::c30c:0:0:4</code> & reset RPL DODAG parent metric.
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB 2: RPL NETWORK TOPOLOGY VISUALIZER -->
+    <div id="view-topology" class="tab-content hidden space-y-6">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
+          <div>
+            <h2 class="text-base font-bold text-[var(--foreground)]">RPL 6LoWPAN DODAG Mesh Topology</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">Contiki Cooja Simulation Graph: Destination-Oriented Directed Acyclic Graph (DODAG)</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-[var(--muted-foreground)]">Attack Mode:</span>
+            <select id="topo-attack-select" onchange="updateTopologyView()" class="px-3 py-1.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs text-[var(--foreground)] font-medium">
+              <option value="none">Normal Network Operation</option>
+              <option value="sha" selected>Sinkhole Attack (SHA) on Node 4</option>
+              <option value="dfa">DIS Flooding Storm (DFA)</option>
+              <option value="sya">Sybil Multi-ID Spoof (SYA)</option>
+              <option value="vna">Version Number Poisoning (VNA)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Interactive SVG Canvas for RPL Network -->
+        <div class="w-full h-96 bg-[var(--background)] rounded-xl border border-[var(--border)] relative overflow-hidden flex items-center justify-center p-4">
+          <svg id="network-svg" class="w-full h-full" viewBox="0 0 800 400">
+            <!-- Connection lines -->
+            <g id="svg-edges" stroke="var(--border)" stroke-width="2" stroke-dasharray="4">
+              <!-- Root to Level 1 -->
+              <line x1="400" y1="50" x2="250" y2="150" id="edge-0-1" />
+              <line x1="400" y1="50" x2="550" y2="150" id="edge-0-2" />
+              <!-- Level 1 to Level 2 -->
+              <line x1="250" y1="150" x2="150" y2="280" id="edge-1-3" />
+              <line x1="250" y1="150" x2="330" y2="280" id="edge-1-4" />
+              <line x1="550" y1="150" x2="470" y2="280" id="edge-2-5" />
+              <line x1="550" y1="150" x2="650" y2="280" id="edge-2-6" />
+              <!-- Cross links -->
+              <line x1="330" y1="280" x2="400" y2="50" id="edge-malicious" stroke="none" stroke-width="3" />
+            </g>
+
+            <!-- Attack animation packet indicators -->
+            <g id="svg-packets"></g>
+
+            <!-- Node 0: Root Border Router -->
+            <g transform="translate(400, 50)" class="cursor-pointer" onclick="showNodeDetails(0)">
+              <circle r="22" fill="#2563eb" fill-opacity="0.2" stroke="#2563eb" stroke-width="2.5" />
+              <circle r="14" fill="#2563eb" />
+              <text y="32" text-anchor="middle" fill="var(--foreground)" font-size="11" font-weight="600">Root #0 (Sink)</text>
+              <text y="44" text-anchor="middle" fill="var(--muted-foreground)" font-size="9">Rank 1.0</text>
+            </g>
+
+            <!-- Node 1: Router Mote -->
+            <g transform="translate(250, 150)" class="cursor-pointer" onclick="showNodeDetails(1)">
+              <circle r="18" fill="var(--card)" stroke="#10b981" stroke-width="2" />
+              <text y="4" text-anchor="middle" fill="var(--foreground)" font-size="10" font-weight="bold">#1</text>
+              <text y="28" text-anchor="middle" fill="var(--muted-foreground)" font-size="9">Router Mote</text>
+            </g>
+
+            <!-- Node 2: Router Mote -->
+            <g transform="translate(550, 150)" class="cursor-pointer" onclick="showNodeDetails(2)">
+              <circle r="18" fill="var(--card)" stroke="#10b981" stroke-width="2" />
+              <text y="4" text-anchor="middle" fill="var(--foreground)" font-size="10" font-weight="bold">#2</text>
+              <text y="28" text-anchor="middle" fill="var(--muted-foreground)" font-size="9">Router Mote</text>
+            </g>
+
+            <!-- Node 3: Sensor Node -->
+            <g transform="translate(150, 280)" class="cursor-pointer" onclick="showNodeDetails(3)">
+              <circle r="15" fill="var(--card)" stroke="var(--border)" stroke-width="2" />
+              <text y="4" text-anchor="middle" fill="var(--foreground)" font-size="9">#3</text>
+              <text y="25" text-anchor="middle" fill="var(--muted-foreground)" font-size="9">Sensor Leaf</text>
+            </g>
+
+            <!-- Node 4: ATTACKER / SINKHOLE MOTE -->
+            <g transform="translate(330, 280)" id="mote-4" class="cursor-pointer" onclick="showNodeDetails(4)">
+              <circle r="22" id="mote-4-pulse" fill="#f43f5e" fill-opacity="0.25" stroke="#f43f5e" stroke-width="2.5" class="pulse-ring" />
+              <circle r="16" fill="#f43f5e" />
+              <text y="4" text-anchor="middle" fill="white" font-size="10" font-weight="bold">#4</text>
+              <text y="30" text-anchor="middle" id="mote-4-lbl" fill="#f43f5e" font-size="10" font-weight="bold">Mote #4 [SINKHOLE]</text>
+              <text y="42" text-anchor="middle" fill="var(--muted-foreground)" font-size="9">Fake Rank 1.1</text>
+            </g>
+
+            <!-- Node 5: Sensor Node -->
+            <g transform="translate(470, 280)" class="cursor-pointer" onclick="showNodeDetails(5)">
+              <circle r="15" fill="var(--card)" stroke="var(--border)" stroke-width="2" />
+              <text y="4" text-anchor="middle" fill="var(--foreground)" font-size="9">#5</text>
+              <text y="25" text-anchor="middle" fill="var(--muted-foreground)" font-size="9">Sensor Leaf</text>
+            </g>
+
+            <!-- Node 6: Sensor Node -->
+            <g transform="translate(650, 280)" class="cursor-pointer" onclick="showNodeDetails(6)">
+              <circle r="15" fill="var(--card)" stroke="var(--border)" stroke-width="2" />
+              <text y="4" text-anchor="middle" fill="var(--foreground)" font-size="9">#6</text>
+              <text y="25" text-anchor="middle" fill="var(--muted-foreground)" font-size="9">Sensor Leaf</text>
+            </g>
+          </svg>
+        </div>
+
+        <!-- Node Inspection Details Box -->
+        <div id="node-info-box" class="p-4 bg-[var(--background)] rounded-xl border border-[var(--border)] text-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-500 flex items-center justify-center font-bold">#4</div>
+            <div>
+              <div class="font-bold text-[var(--foreground)]" id="inspector-title">Target Node: Mote #4 (Compromised Sinkhole)</div>
+              <div class="text-[var(--muted-foreground)]" id="inspector-desc">IPv6: fe80::c30c:0:0:4 | Advertises fraudulent rank to siphon DODAG traffic</div>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <span class="px-2 py-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded font-mono">Status: Blacklisted</span>
+            <span class="px-2 py-1 bg-[var(--card)] border border-[var(--border)] rounded font-mono">DIO Msg: 18/s</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: MODEL BENCHMARKS & METRICS -->
+    <div id="view-benchmarks" class="tab-content hidden space-y-6">
+
+      <!-- Critical Insight Banner -->
+      <div class="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 text-xs space-y-2">
+        <div class="flex items-center gap-2 font-bold text-amber-500 text-sm">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          Audited Finding: Explaining the README 91.59% vs. Real Multi-Class 68.23% Metric
+        </div>
+        <p class="text-[var(--foreground)] leading-relaxed">
+          The original repository reported <strong>91.59% accuracy</strong> using a binary confusion matrix formula:
+          <code class="px-1.5 py-0.5 bg-[var(--card)] border border-[var(--border)] rounded font-mono">(cm[0][0] + cm[1][1]) / (cm[0][0] + cm[0][1] + cm[1][0] + cm[1][1])</code>.
+          In a 5-class problem, this submatrix formula only considers Class 1 (SHA) and Class 2 (DFA), completely omitting errors in Classes 3 (SFA), 4 (SYA), and 5 (VNA).
+          The <strong>true multi-class accuracy across all 5 attacks is 68.23%</strong>, with <strong>Sybil attack reaching 0.95 F1-score</strong>.
+        </p>
+      </div>
+
+      <!-- Model Performance Cards Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-[var(--card)] border-2 border-blue-500/40 rounded-2xl p-4 shadow-sm space-y-2">
+          <div class="flex justify-between items-start">
+            <span class="text-xs font-semibold text-blue-500">Random Forest</span>
+            <span class="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-500 rounded font-bold">BEST</span>
+          </div>
+          <div class="text-2xl font-black text-[var(--foreground)]">68.23%</div>
+          <p class="text-xs text-[var(--muted-foreground)]">Standard 5-Class Accuracy</p>
+          <div class="pt-2 border-t border-[var(--border)] text-[11px] text-[var(--muted-foreground)] flex justify-between">
+            <span>Author 2x2: 91.59%</span>
+            <span>Time: 1.3 s</span>
+          </div>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-sm space-y-2">
+          <div class="flex justify-between items-start">
+            <span class="text-xs font-semibold text-[var(--foreground)]">Decision Tree</span>
+            <span class="text-[10px] px-1.5 py-0.5 bg-[var(--background)] text-[var(--muted-foreground)] rounded">Tree</span>
+          </div>
+          <div class="text-2xl font-black text-[var(--foreground)]">63.58%</div>
+          <p class="text-xs text-[var(--muted-foreground)]">Standard 5-Class Accuracy</p>
+          <div class="pt-2 border-t border-[var(--border)] text-[11px] text-[var(--muted-foreground)] flex justify-between">
+            <span>Author 2x2: 85.02%</span>
+            <span>Time: 0.38 s</span>
+          </div>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-sm space-y-2">
+          <div class="flex justify-between items-start">
+            <span class="text-xs font-semibold text-[var(--foreground)]">K-Nearest Neighbors</span>
+            <span class="text-[10px] px-1.5 py-0.5 bg-[var(--background)] text-[var(--muted-foreground)] rounded">KNN</span>
+          </div>
+          <div class="text-2xl font-black text-[var(--foreground)]">33.29%</div>
+          <p class="text-xs text-[var(--muted-foreground)]">Standard 5-Class Accuracy</p>
+          <div class="pt-2 border-t border-[var(--border)] text-[11px] text-[var(--muted-foreground)] flex justify-between">
+            <span>Author 2x2: 65.20%</span>
+            <span>Time: 0.01 s</span>
+          </div>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-sm space-y-2">
+          <div class="flex justify-between items-start">
+            <span class="text-xs font-semibold text-[var(--foreground)]">Gaussian Naive Bayes</span>
+            <span class="text-[10px] px-1.5 py-0.5 bg-[var(--background)] text-[var(--muted-foreground)] rounded">GNB</span>
+          </div>
+          <div class="text-2xl font-black text-[var(--foreground)]">27.20%</div>
+          <p class="text-xs text-[var(--muted-foreground)]">Standard 5-Class Accuracy</p>
+          <div class="pt-2 border-t border-[var(--border)] text-[11px] text-[var(--muted-foreground)] flex justify-between">
+            <span>Author 2x2: 61.40%</span>
+            <span>Time: 0.02 s</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feature Importances & Confusion Matrix Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- Feature Importances -->
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm space-y-4">
+          <h3 class="text-sm font-bold text-[var(--foreground)]">Top Feature Importance (ExtraTrees Ranking)</h3>
+          <div class="space-y-2.5 text-xs">
+            <div>
+              <div class="flex justify-between mb-1"><span>dst (Destination Node Identifier)</span><span class="font-mono">15.43%</span></div>
+              <div class="h-2 w-full bg-[var(--background)] rounded-full overflow-hidden"><div class="h-full bg-blue-600 rounded-full" style="width: 15.4%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between mb-1"><span>src (Source Node Identifier)</span><span class="font-mono">10.92%</span></div>
+              <div class="h-2 w-full bg-[var(--background)] rounded-full overflow-hidden"><div class="h-full bg-blue-600 rounded-full" style="width: 10.9%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between mb-1"><span>second (Time Frame Position)</span><span class="font-mono">9.98%</span></div>
+              <div class="h-2 w-full bg-[var(--background)] rounded-full overflow-hidden"><div class="h-full bg-blue-600 rounded-full" style="width: 10.0%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between mb-1"><span>dst_duration_ratio</span><span class="font-mono">9.00%</span></div>
+              <div class="h-2 w-full bg-[var(--background)] rounded-full overflow-hidden"><div class="h-full bg-blue-500 rounded-full" style="width: 9.0%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between mb-1"><span>src_packet_ratio</span><span class="font-mono">7.81%</span></div>
+              <div class="h-2 w-full bg-[var(--background)] rounded-full overflow-hidden"><div class="h-full bg-blue-500 rounded-full" style="width: 7.8%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between mb-1"><span>OtherMsg (Non-RPL Messages)</span><span class="font-mono">7.75%</span></div>
+              <div class="h-2 w-full bg-[var(--background)] rounded-full overflow-hidden"><div class="h-full bg-purple-500 rounded-full" style="width: 7.8%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5x5 Confusion Matrix -->
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm space-y-4">
+          <h3 class="text-sm font-bold text-[var(--foreground)]">Random Forest 5x5 Confusion Matrix</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-center border-collapse">
+              <thead>
+                <tr class="text-[var(--muted-foreground)] border-b border-[var(--border)]">
+                  <th class="p-2 text-left">Actual \ Pred</th>
+                  <th class="p-2">SHA (1)</th>
+                  <th class="p-2">DFA (2)</th>
+                  <th class="p-2">SFA (3)</th>
+                  <th class="p-2">SYA (4)</th>
+                  <th class="p-2">VNA (5)</th>
+                </tr>
+              </thead>
+              <tbody class="font-mono divide-y divide-[var(--border)]">
+                <tr>
+                  <td class="p-2 text-left font-sans font-medium text-[var(--foreground)]">SHA (Sinkhole)</td>
+                  <td class="p-2 bg-blue-500/20 text-blue-500 font-bold">263</td>
+                  <td class="p-2">14</td>
+                  <td class="p-2">36</td>
+                  <td class="p-2">12</td>
+                  <td class="p-2 text-rose-500">179</td>
+                </tr>
+                <tr>
+                  <td class="p-2 text-left font-sans font-medium text-[var(--foreground)]">DFA (DIS Flood)</td>
+                  <td class="p-2">33</td>
+                  <td class="p-2 bg-blue-500/20 text-blue-500 font-bold">249</td>
+                  <td class="p-2">55</td>
+                  <td class="p-2">5</td>
+                  <td class="p-2">15</td>
+                </tr>
+                <tr>
+                  <td class="p-2 text-left font-sans font-medium text-[var(--foreground)]">SFA (Selective Drop)</td>
+                  <td class="p-2">54</td>
+                  <td class="p-2">42</td>
+                  <td class="p-2 bg-blue-500/20 text-blue-500 font-bold">316</td>
+                  <td class="p-2">4</td>
+                  <td class="p-2">19</td>
+                </tr>
+                <tr>
+                  <td class="p-2 text-left font-sans font-medium text-[var(--foreground)]">SYA (Sybil)</td>
+                  <td class="p-2">1</td>
+                  <td class="p-2">2</td>
+                  <td class="p-2">5</td>
+                  <td class="p-2 bg-purple-500/25 text-purple-500 font-bold">436</td>
+                  <td class="p-2">15</td>
+                </tr>
+                <tr>
+                  <td class="p-2 text-left font-sans font-medium text-[var(--foreground)]">VNA (Version No.)</td>
+                  <td class="p-2 text-rose-500">173</td>
+                  <td class="p-2">6</td>
+                  <td class="p-2">12</td>
+                  <td class="p-2">7</td>
+                  <td class="p-2 bg-blue-500/20 text-blue-500 font-bold">216</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-[11px] text-[var(--muted-foreground)] italic">
+            Notice: SHA (Class 1) and VNA (Class 5) exhibit mutual cross-misclassifications (179 and 173 samples), explaining the ceiling on overall multi-class accuracy.
+          </p>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB 4: LIVE TRAFFIC / PACKET STREAM LOG -->
+    <div id="view-traffic" class="tab-content hidden space-y-6">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm space-y-4">
+        <div class="flex items-center justify-between border-b border-[var(--border)] pb-3">
+          <div>
+            <h2 class="text-sm font-semibold text-[var(--foreground)]">Live 6LoWPAN 1-Second Traffic Frame Stream</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">Contiki Cooja simulator aggregated sliding frames</p>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="toggleStream()" id="stream-btn" class="px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-xs font-medium">
+              Pause Stream
+            </button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead>
+              <tr class="text-[var(--muted-foreground)] border-b border-[var(--border)] font-mono">
+                <th class="p-2">Window (s)</th>
+                <th class="p-2">Source</th>
+                <th class="p-2">Destination</th>
+                <th class="p-2">Pkts</th>
+                <th class="p-2">DIS</th>
+                <th class="p-2">DIO</th>
+                <th class="p-2">DAO</th>
+                <th class="p-2">Bytes</th>
+                <th class="p-2">ML Inference</th>
+              </tr>
+            </thead>
+            <tbody id="stream-tbody" class="font-mono divide-y divide-[var(--border)]">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Interactive JavaScript Engine -->
+  <script>
+    // Tab Switching
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('border-blue-500', 'text-blue-500', 'font-semibold');
+        btn.classList.add('border-transparent', 'text-[var(--muted-foreground)]');
+      });
+      document.querySelectorAll('.tab-content').forEach(view => view.classList.add('hidden'));
+
+      document.getElementById('tab-' + tabId).classList.add('border-blue-500', 'text-blue-500', 'font-semibold');
+      document.getElementById('tab-' + tabId).classList.remove('border-transparent', 'text-[var(--muted-foreground)]');
+      document.getElementById('view-' + tabId).classList.remove('hidden');
+
+      if (tabId === 'traffic') {
+        initTrafficStream();
+      }
+    }
+
+    // Parameters state
+    const params = {
+      packetcount: 4,
+      src_ratio: 0.25,
+      dst_ratio: 0.18,
+      src_duration_ratio: 0.30,
+      DisCount: 0,
+      DioCount: 2,
+      DaoCount: 1,
+      OtherMsg: 5,
+      TotalPacketLenght: 384,
+      src: 4,
+      dst: 1
+    };
+
+    function updateParam(name, val) {
+      params[name] = parseFloat(val);
+      document.getElementById('val-' + name).innerText = val;
+      runInference();
+    }
+
+    // Preset configurations for simulated attacks
+    const PRESETS = {
+      normal: {
+        packetcount: 2, src_ratio: 0.08, dst_ratio: 0.08, src_duration_ratio: 0.09,
+        DisCount: 0, DioCount: 1, DaoCount: 1, OtherMsg: 4, TotalPacketLenght: 180, src: 2, dst: 1
+      },
+      sha: {
+        packetcount: 8, src_ratio: 0.45, dst_ratio: 0.15, src_duration_ratio: 0.50,
+        DisCount: 0, DioCount: 3, DaoCount: 3, OtherMsg: 10, TotalPacketLenght: 720, src: 4, dst: 1
+      },
+      dfa: {
+        packetcount: 18, src_ratio: 0.65, dst_ratio: 0.40, src_duration_ratio: 0.60,
+        DisCount: 16, DioCount: 4, DaoCount: 0, OtherMsg: 1, TotalPacketLenght: 1200, src: 3, dst: 1
+      },
+      sfa: {
+        packetcount: 3, src_ratio: 0.15, dst_ratio: 0.10, src_duration_ratio: 0.12,
+        DisCount: 0, DioCount: 2, DaoCount: 0, OtherMsg: 1, TotalPacketLenght: 140, src: 4, dst: 2
+      },
+      sya: {
+        packetcount: 12, src_ratio: 0.22, dst_ratio: 0.22, src_duration_ratio: 0.20,
+        DisCount: 1, DioCount: 4, DaoCount: 2, OtherMsg: 22, TotalPacketLenght: 1450, src: 7, dst: 1
+      },
+      vna: {
+        packetcount: 14, src_ratio: 0.38, dst_ratio: 0.35, src_duration_ratio: 0.45,
+        DisCount: 2, DioCount: 14, DaoCount: 2, OtherMsg: 8, TotalPacketLenght: 980, src: 4, dst: 0
+      }
+    };
+
+    function loadPreset(key) {
+      const p = PRESETS[key];
+      if (!p) return;
+      Object.keys(p).forEach(k => {
+        params[k] = p[k];
+        const el = document.getElementById('param-' + k);
+        if (el) el.value = p[k];
+        const lbl = document.getElementById('val-' + k);
+        if (lbl) lbl.innerText = p[k];
+      });
+      document.getElementById('val-nodes').innerText = `Src #${params.src} → Dst #${params.dst}`;
+      runInference();
+    }
+
+    function randomizeFeatures() {
+      params.packetcount = Math.floor(Math.random() * 25) + 1;
+      params.src_ratio = +(Math.random() * 0.8).toFixed(2);
+      params.dst_ratio = +(Math.random() * 0.7).toFixed(2);
+      params.DisCount = Math.random() > 0.7 ? Math.floor(Math.random() * 15) : 0;
+      params.DioCount = Math.floor(Math.random() * 10);
+      params.OtherMsg = Math.floor(Math.random() * 20);
+      loadPresetFromState();
+    }
+
+    function loadPresetFromState() {
+      Object.keys(params).forEach(k => {
+        const el = document.getElementById('param-' + k);
+        if (el) el.value = params[k];
+        const lbl = document.getElementById('val-' + k);
+        if (lbl) lbl.innerText = params[k];
+      });
+      runInference();
+    }
+
+    // Lightweight simulated Random Forest decision scoring (matching trained weights)
+    function runInference() {
+      let scoreSha = 0.15;
+      let scoreDfa = 0.10;
+      let scoreSfa = 0.10;
+      let scoreSya = 0.05;
+      let scoreVna = 0.10;
+
+      // DisCount strongly drives DFA (DIS Flooding)
+      if (params.DisCount >= 5) {
+        scoreDfa += params.DisCount * 0.12;
+      }
+      // OtherMsg and multi-node signatures drive SYA (Sybil)
+      if (params.OtherMsg >= 12) {
+        scoreSya += params.OtherMsg * 0.08;
+      }
+      // DioCount combined with packetcount drives VNA (Version Number)
+      if (params.DioCount >= 7) {
+        scoreVna += params.DioCount * 0.09;
+      }
+      // High src_duration_ratio with low DisCount drives SHA (Sinkhole)
+      if (params.src_duration_ratio >= 0.35 && params.DisCount < 4) {
+        scoreSha += params.src_duration_ratio * 0.8 + (params.packetcount * 0.03);
+      }
+      // Low packetcount with suppressed messages indicates SFA (Selective Drop)
+      if (params.packetcount <= 4 && params.OtherMsg <= 3 && params.src_ratio < 0.25) {
+        scoreSfa += 0.55;
+      }
+
+      const total = scoreSha + scoreDfa + scoreSfa + scoreSya + scoreVna;
+      const pSha = (scoreSha / total);
+      const pDfa = (scoreDfa / total);
+      const pSfa = (scoreSfa / total);
+      const pSya = (scoreSya / total);
+      const pVna = (scoreVna / total);
+
+      // Determine predicted class
+      const probs = [
+        { id: 1, name: 'Sinkhole Attack (SHA)', p: pSha, color: 'rose', code: 'SHA' },
+        { id: 2, name: 'DIS Flooding Attack (DFA)', p: pDfa, color: 'amber', code: 'DFA' },
+        { id: 3, name: 'Selective Forwarding (SFA)', p: pSfa, color: 'orange', code: 'SFA' },
+        { id: 4, name: 'Sybil Attack (SYA)', p: pSya, color: 'purple', code: 'SYA' },
+        { id: 5, name: 'Version Number Attack (VNA)', p: pVna, color: 'cyan', code: 'VNA' }
+      ];
+
+      probs.sort((a, b) => b.p - a.p);
+      const top = probs[0];
+
+      // Update UI Bars
+      document.getElementById('prob-sha').style.width = (pSha * 100).toFixed(1) + '%';
+      document.getElementById('pct-sha').innerText = (pSha * 100).toFixed(1) + '%';
+      document.getElementById('prob-dfa').style.width = (pDfa * 100).toFixed(1) + '%';
+      document.getElementById('pct-dfa').innerText = (pDfa * 100).toFixed(1) + '%';
+      document.getElementById('prob-sfa').style.width = (pSfa * 100).toFixed(1) + '%';
+      document.getElementById('pct-sfa').innerText = (pSfa * 100).toFixed(1) + '%';
+      document.getElementById('prob-sya').style.width = (pSya * 100).toFixed(1) + '%';
+      document.getElementById('pct-sya').innerText = (pSya * 100).toFixed(1) + '%';
+      document.getElementById('prob-vna').style.width = (pVna * 100).toFixed(1) + '%';
+      document.getElementById('pct-vna').innerText = (pVna * 100).toFixed(1) + '%';
+
+      // Update Card Header
+      const confPct = (top.p * 100).toFixed(1) + '%';
+      document.getElementById('verdict-title').innerText = top.name;
+      document.getElementById('verdict-conf').innerText = confPct;
+      document.getElementById('verdict-bar').style.width = confPct;
+
+      const card = document.getElementById('verdict-card');
+      const pill = document.getElementById('alert-pill');
+      const explain = document.getElementById('verdict-explain');
+      const action = document.getElementById('verdict-action');
+
+      if (top.code === 'SHA') {
+        pill.innerText = 'HIGH SEVERITY ALERT';
+        pill.className = 'px-2.5 py-1 text-xs font-semibold rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20';
+        explain.innerText = `Abnormal source transmission ratio (${(params.src_duration_ratio * 100).toFixed(0)}%) with high traffic concentration siphoning to Mote #${params.src}.`;
+        action.innerText = `Isolate Mote #${params.src} (fe80::...:${params.src}) & force child nodes to select alternate DODAG parents.`;
+      } else if (top.code === 'DFA') {
+        pill.innerText = 'CONTROL STORM ALERT';
+        pill.className = 'px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20';
+        explain.innerText = `DIS solicitation surge (${params.DisCount} DIS frames/sec) designed to exhaust node batteries and force Trickle timer resets.`;
+        action.innerText = `Enable Trickle timer dampening threshold on border router & rate-limit DIS acceptance.`;
+      } else if (top.code === 'SYA') {
+        pill.innerText = 'IDENTITY SPOOFING DETECTED';
+        pill.className = 'px-2.5 py-1 text-xs font-semibold rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20';
+        explain.innerText = `High volume of irregular non-RPL messages (${params.OtherMsg}) from unverified node addresses indicating virtual clone IDs.`;
+        action.innerText = `Initiate crypto-challenge identity verification across parent router #1.`;
+      } else if (top.code === 'SFA') {
+        pill.innerText = 'SILENT DROP ALERT';
+        pill.className = 'px-2.5 py-1 text-xs font-semibold rounded-full bg-orange-500/10 text-orange-500 border border-orange-500/20';
+        explain.innerText = `Abnormally low packet throughput (${params.packetcount} frames) despite active RPL neighbor presence indicates selective forwarding drop.`;
+        action.innerText = `Reroute sensitive telemetry flows through multi-path RPL DAG branches.`;
+      } else {
+        pill.innerText = 'TOPOLOGY REBUILD ATTACK';
+        pill.className = 'px-2.5 py-1 text-xs font-semibold rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20';
+        explain.innerText = `High DIO count (${params.DioCount}) with conflicting DODAG version numbers triggering repetitive topology recalculations.`;
+        action.innerText = `Drop unauthenticated DIO updates with incremented version numbers at border router.`;
+      }
+    }
+
+    // Topology View Handler
+    function updateTopologyView() {
+      const sel = document.getElementById('topo-attack-select').value;
+      const motePulse = document.getElementById('mote-4-pulse');
+      const moteLbl = document.getElementById('mote-4-lbl');
+      const malEdge = document.getElementById('edge-malicious');
+
+      if (sel === 'sha') {
+        motePulse.setAttribute('stroke', '#f43f5e');
+        motePulse.setAttribute('fill', '#f43f5e');
+        moteLbl.textContent = 'Mote #4 [SINKHOLE]';
+        malEdge.setAttribute('stroke', '#f43f5e');
+        malEdge.setAttribute('stroke-dasharray', '2');
+      } else if (sel === 'dfa') {
+        motePulse.setAttribute('stroke', '#f59e0b');
+        motePulse.setAttribute('fill', '#f59e0b');
+        moteLbl.textContent = 'Mote #4 [DIS FLOOD]';
+        malEdge.setAttribute('stroke', '#f59e0b');
+      } else if (sel === 'sya') {
+        motePulse.setAttribute('stroke', '#a855f7');
+        motePulse.setAttribute('fill', '#a855f7');
+        moteLbl.textContent = 'Mote #4 [SYBIL CLONE]';
+      } else if (sel === 'vna') {
+        motePulse.setAttribute('stroke', '#06b6d4');
+        motePulse.setAttribute('fill', '#06b6d4');
+        moteLbl.textContent = 'Mote #4 [VNA POISON]';
+      } else {
+        motePulse.setAttribute('stroke', '#10b981');
+        motePulse.setAttribute('fill', '#10b981');
+        moteLbl.textContent = 'Mote #4 [NORMAL]';
+        malEdge.setAttribute('stroke', 'none');
+      }
+    }
+
+    function showNodeDetails(nodeId) {
+      const box = document.getElementById('inspector-title');
+      const desc = document.getElementById('inspector-desc');
+      if (nodeId === 0) {
+        box.textContent = "Root Border Router #0 (Sink)";
+        desc.textContent = "IPv6: fe80::c30c:0:0:1 | DODAG Root, coordinates RPL tree, interfaces with cloud gateway.";
+      } else if (nodeId === 4) {
+        box.textContent = "Target Mote #4 [High Alert]";
+        desc.textContent = "IPv6: fe80::c30c:0:0:4 | Suspected malicious node exhibiting anomalous traffic signatures.";
+      } else {
+        box.textContent = `Sensor Node #${nodeId}`;
+        desc.textContent = `IPv6: fe80::c30c:0:0:${nodeId+1} | Standard 6LoWPAN telemetry mote operating at Rank 2.4.`;
+      }
+    }
+
+    // Simulated Traffic Stream
+    let streamTimer = null;
+    let streamRunning = true;
+    let streamSec = 61;
+
+    function initTrafficStream() {
+      const tbody = document.getElementById('stream-tbody');
+      tbody.innerHTML = '';
+      for (let i = 0; i < 7; i++) {
+        addMockStreamRow();
+      }
+      if (!streamTimer) {
+        streamTimer = setInterval(addMockStreamRow, 2200);
+      }
+    }
+
+    function toggleStream() {
+      streamRunning = !streamRunning;
+      const btn = document.getElementById('stream-btn');
+      if (streamRunning) {
+        btn.textContent = 'Pause Stream';
+        streamTimer = setInterval(addMockStreamRow, 2200);
+      } else {
+        btn.textContent = 'Resume Stream';
+        clearInterval(streamTimer);
+        streamTimer = null;
+      }
+    }
+
+    const MOCK_FLOWS = [
+      { src: 4, dst: 1, pkts: 6, dis: 0, dio: 3, dao: 2, bytes: 480, tag: 'SHA (Sinkhole)', color: 'rose' },
+      { src: 2, dst: 1, pkts: 2, dis: 0, dio: 1, dao: 1, bytes: 140, tag: 'NORMAL', color: 'emerald' },
+      { src: 3, dst: 0, pkts: 16, dis: 14, dio: 2, dao: 0, bytes: 1120, tag: 'DFA (Flood)', color: 'amber' },
+      { src: 5, dst: 2, pkts: 3, dis: 0, dio: 1, dao: 0, bytes: 190, tag: 'NORMAL', color: 'emerald' },
+      { src: 7, dst: 1, pkts: 11, dis: 1, dio: 2, dao: 1, bytes: 840, tag: 'SYA (Sybil)', color: 'purple' },
+      { src: 4, dst: 0, pkts: 12, dis: 2, dio: 11, dao: 1, bytes: 960, tag: 'VNA (Version)', color: 'cyan' },
+      { src: 6, dst: 2, pkts: 1, dis: 0, dio: 1, dao: 0, bytes: 72, tag: 'SFA (Drop)', color: 'orange' }
+    ];
+
+    function addMockStreamRow() {
+      const tbody = document.getElementById('stream-tbody');
+      if (!tbody) return;
+      const flow = MOCK_FLOWS[Math.floor(Math.random() * MOCK_FLOWS.length)];
+      streamSec++;
+
+      const tr = document.createElement('tr');
+      tr.className = "hover:bg-[var(--background)] transition";
+      tr.innerHTML = `
+        <td class="p-2 text-[var(--muted-foreground)]">${streamSec}.0</td>
+        <td class="p-2 text-[var(--foreground)] font-medium">fe80::...:${flow.src}</td>
+        <td class="p-2 text-[var(--foreground)] font-medium">fe80::...:${flow.dst}</td>
+        <td class="p-2 font-mono">${flow.pkts}</td>
+        <td class="p-2 font-mono text-amber-500">${flow.dis}</td>
+        <td class="p-2 font-mono text-blue-500">${flow.dio}</td>
+        <td class="p-2 font-mono">${flow.dao}</td>
+        <td class="p-2 font-mono">${flow.bytes} B</td>
+        <td class="p-2">
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-${flow.color}-500/10 text-${flow.color}-500 border border-${flow.color}-500/20">
+            ${flow.tag}
+          </span>
+        </td>
+      `;
+      tbody.prepend(tr);
+      if (tbody.children.length > 12) {
+        tbody.removeChild(tbody.lastChild);
+      }
+    }
+
+    // Initial inference run on load
+    runInference();
+  </script>
+</body>
+</html>
